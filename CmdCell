@@ -1,0 +1,69 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class CmdCell : MonoBehaviour
+{
+    public RectTransform rectTr;
+    public Image bgImg;
+    public Text idxText;
+    private int idx;
+    private CmdObj csCmdObj;
+
+    // ########################
+    // ## Overrides
+    // ########################
+    private void Awake()
+    {
+        this.csCmdObj = null;
+    }
+
+
+    // ########################
+    // ## Update
+    // ########################
+    public void SetIdx(int idx)
+    {
+        this.idx = idx;
+    }
+
+    public void UpdateIdxText(bool isDraw, int orderIdx)
+    {
+        if (isDraw == true)
+            this.idxText.text = string.Format("{0}", orderIdx);
+        else
+            this.idxText.text = "";
+    }
+
+    public void UpdateCmdObjPosition(CmdObj csCmdObjToRep)
+    {
+        if (this.csCmdObj == null)
+        {
+            this.csCmdObj = csCmdObjToRep;
+        }
+        else
+        {
+            CmdCell csCmdCell = this.csCmdObj.rectTr.parent.gameObject.GetComponent<CmdCell>();
+            if (csCmdCell != null)
+            {
+                if (csCmdCell.idx != this.csCmdObj.idx && this.csCmdObj.cmdState != CmdObj.CmdState.CmderDrag)
+                    this.csCmdObj.gameObject.SetActive(false);
+            }
+
+            this.csCmdObj = csCmdObjToRep;
+        }
+
+        float reScaleX = 0.8f;
+        Vector3 stdPos = new Vector3(32.5f + this.csCmdObj.rectTr.sizeDelta.x * 0.5f * reScaleX, -this.rectTr.sizeDelta.y * 0.5f, 0);
+        this.csCmdObj.tr.SetParent(this.rectTr);
+        this.csCmdObj.tr.localScale = Vector3.one * reScaleX;
+        this.csCmdObj.tr.localPosition = stdPos + Vector3.right * stdPos.x * 0.5f * this.csCmdObj.xIdx;
+        this.csCmdObj.gameObject.SetActive(true);
+    }
+
+    public void UpdateBgColor(Color color)
+    {
+        this.bgImg.color = color;
+    }
+}
