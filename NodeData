@@ -1,0 +1,262 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class NodeScript : MonoBehaviour
+{
+    public GameObject RightConnectedNode;
+    public GameObject LeftConnectedNode;
+    public DropLogic ConnectedBlank;
+    public bool FixDirect;
+    public bool Reverse =false;
+    bool isFinal = false;
+
+    LadderRidingManager ladderRidingManager;
+
+    [HideInInspector]
+    public int Order;
+    [HideInInspector]
+    public int CallCount;
+	  [HideInInspector]
+  	public bool Skip = false;
+   	[HideInInspector]
+	  public float term;
+
+	  GameObject NextNode;
+    int moveCount; //temp
+    bool countUp;
+    bool MoveHorizontal;
+    public string fixDirection;
+
+    private void Awake()
+    {
+        CallCount = 0;
+        countUp = false;
+        moveCount = 0;
+        ladderRidingManager = transform.parent.transform.parent.GetComponent<LadderRidingManager>();
+    }
+
+    public void Init()
+    {
+   	  	term = 0.6f;
+	    	Skip = false;
+        isFinal = false;
+        CallCount = 0;
+        countUp = false;
+        moveCount = 0;
+        ladderRidingManager.EndNode = null;
+        CancelInvoke();
+    }
+
+
+    void SetFixDirection()
+    {
+        if (ConnectedBlank != null)
+            fixDirection = ConnectedBlank.Target.tag;
+
+    }
+
+    public void DetectPlayer()
+    {
+
+        if(CallCount < 2)
+            CallCount++;
+        else
+        {
+            Stage1.Instance.CurrentGame.Wrong(2);
+            CallCount = 0;
+            isFinal = false;
+            return;
+        }
+
+        moveCount = ladderRidingManager.MoveCount;
+
+        if (moveCount % 2 == 0) //짝수-가로이동
+        {
+            if (FixDirect)
+            {
+                SetFixDirection();
+
+                switch (fixDirection)
+                {
+                    case "left":
+                        countUp = true;
+                        if (LeftConnectedNode != null)
+                            ladderRidingManager.EndNode = LeftConnectedNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "right":
+                        countUp = true;
+                        if (RightConnectedNode != null)
+                            ladderRidingManager.EndNode = RightConnectedNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "up":
+                        countUp = false;
+                        if (Reverse == false)
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, true);
+                        else
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, false);
+
+                        if (NextNode != null)
+                            ladderRidingManager.EndNode = NextNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "down":
+                        countUp = false;
+
+                        if (Reverse == false)
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, false);
+                        else
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, true);
+                        if (NextNode != null)
+                            ladderRidingManager.EndNode = NextNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                }
+            }
+
+            else
+            {
+                countUp = true;
+                if (RightConnectedNode == null)
+                {
+                    if (LeftConnectedNode != null)
+                        ladderRidingManager.EndNode = LeftConnectedNode;
+                    else
+                    {
+                        CallScoringFunc();
+                    }
+                }
+
+                else //1. 우선권은 오른편 노드 
+                {
+                    ladderRidingManager.EndNode = RightConnectedNode;
+                }
+            }
+        }
+
+        else //홀수 - 수직 이동 
+        {
+            if (FixDirect)
+            {
+                SetFixDirection();
+                switch (fixDirection)
+                {
+                    case "left":
+                        countUp = false;
+                        if (LeftConnectedNode != null)
+                            ladderRidingManager.EndNode = LeftConnectedNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "right":
+                        countUp = false;
+                        if (RightConnectedNode != null)
+                            ladderRidingManager.EndNode = RightConnectedNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "up":
+                        countUp = true;
+                        if (Reverse == false)
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, true);
+                        else
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, false);
+                        if (NextNode != null)
+                            ladderRidingManager.EndNode = NextNode;
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                    case "down":
+                        countUp = true;
+                        if (Reverse == false)
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, false);
+                        else
+                            NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, true);
+                        if (NextNode != null)
+                        {
+                            ladderRidingManager.EndNode = NextNode;
+
+                        }
+                        else
+                        {
+                            CallScoringFunc();
+                        }
+                        break;
+                }
+            }
+
+            else
+            {
+                NextNode = transform.parent.GetComponent<AxisManager>().ReturnNextNode(Order, true);
+                countUp = true;
+
+                if (NextNode != null)
+                    ladderRidingManager.EndNode = NextNode;
+                else //3. 처음 혹은 마지막 노드일 경우 
+                {
+                    CallScoringFunc();
+                }
+            }
+        }
+        gameObject.transform.GetComponent<BoxCollider2D>().enabled = false;
+
+        if (ladderRidingManager.StartNode == gameObject) //스타트 노드일 경우 대기시간 없애려고  
+            Move();
+        else
+            Invoke("Move", term);
+    }
+
+  
+    private void Move()
+    {
+        if (!isFinal)
+        {
+            if (countUp)
+            {
+                if (moveCount % 2 == 0)
+                    MoveHorizontal = true;
+                else
+                    MoveHorizontal = false;
+            }
+
+            if (!countUp)
+            {
+                if ((moveCount - 1) % 2 == 0)
+                    MoveHorizontal = true;
+                else
+                    MoveHorizontal = false;
+            }
+
+            ladderRidingManager.MoveClonePlayer(countUp, MoveHorizontal, Skip);
+
+        }
+    }
+   
+
+    void CallScoringFunc()
+    {
+        isFinal = true;
+        if(Stage1.Instance.CurrentGame != null)
+        ladderRidingManager.Scoring(gameObject);
+    }
+}
