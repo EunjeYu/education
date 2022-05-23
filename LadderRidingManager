@@ -1,0 +1,163 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public enum DirectionMode { UP, DOWN }
+
+public class LadderRidingManager : Singleton<LadderRidingManager>
+{
+    public GameObject StartNode;
+    public GameObject AnswerNode;
+    [HideInInspector]
+    public bool DoWrong =false;
+    [HideInInspector]
+    public GameObject EndNode;
+    public int MoveCount;
+    [HideInInspector]
+    public GameObject ClonePlayer;
+
+    public DirectionMode NowDirection;
+
+    public GameObject[] AllNode;
+
+    int LeantweenID;
+
+    Vector3 curBeforePos;
+ 
+    private bool moveHorizontal;
+
+  	private float moveTime;
+
+	private float distance;
+
+    public void Init()
+    {
+        DoWrong = false;
+        curBeforePos = new Vector3(0, 0, 0);
+        LeantweenID = 0;
+
+        for (int i = 0; i < AllNode.Length; i++)
+        {
+            AllNode[i].GetComponent<BoxCollider2D>().enabled = false;
+            AllNode[i].GetComponent<NodeScript>().Init();
+        }
+
+        StartNode.GetComponent<BoxCollider2D>().enabled = true;
+
+        MoveCount = 1;
+        ClonePlayer = Stage1.Instance.Player_Clone;
+
+		ClonePlayer.GetComponent<MeshRenderer>().enabled = true;
+        ClonePlayer.SetActive(true);
+        Stage1.Instance.Player_Clone_Idle.SetActive(false);
+        ClonePlayer.GetComponent<Spine.Unity.SkeletonAnimation>().AnimationState.SetAnimation(0, "climb", true);
+        ClonePlayer.transform.position = StartNode.transform.position;
+        StartNode.GetComponent<NodeScript>().DetectPlayer();
+    }
+
+    void Init_2()
+    {
+
+        curBeforePos = new Vector3(0, 0, 0);
+        LeantweenID = 0;
+
+        for (int i = 0; i < AllNode.Length; i++)
+        {
+            AllNode[i].GetComponent<BoxCollider2D>().enabled = false;
+            AllNode[i].GetComponent<NodeScript>().Init();
+        }
+
+        MoveCount = 1;
+        for (int i = 0; i < AllNode.Length; i++)
+        {
+            AllNode[i].GetComponent<NodeScript>().Skip = true;
+            AllNode[i].GetComponent<NodeScript>().term = 0f;
+        }
+
+        moveTime = 0;
+        ClonePlayer.transform.position = StartNode.transform.position;
+        StartNode.GetComponent<NodeScript>().DetectPlayer();
+    }
+
+    private void Awake()
+    {
+        for (int i = 0; i < AllNode.Length; i++)
+        {
+            AllNode[i].GetComponent<BoxCollider2D>().enabled = false;
+        }
+    }
+
+    public void MoveClonePlayer(bool _countup, bool _moveHorizontal, bool _skip = false)
+    {
+        if (_countup)
+            MoveCount++;
+       
+        moveHorizontal = _moveHorizontal;
+
+        distance = Vector3.Distance(ClonePlayer.transform.position, EndNode.transform.position);
+        curBeforePos = ClonePlayer.transform.position;
+       
+        if (!_skip)
+            moveTime = 0.5f * distance; //original : 1.1f
+        else
+        {
+            moveTime = 0;
+        }
+
+        LeantweenID = LeanTween.move(ClonePlayer, EndNode.transform.position, moveTime).setOnComplete(MoveEnding).id;
+        Debug.Log("LeanTweenID : " + LeantweenID);
+    }
+
+   public void SkipMode()
+	{
+        if (LeantweenID != 0)
+        {
+            LeanTween.cancel(LeantweenID);
+            Debug.Log("LeanTweenID : " + LeantweenID);
+        }
+        Init_2();
+    }
+
+    void MoveEnding()
+    {
+        EndNode.transform.GetComponent<BoxCollider2D>().enabled = true;
+        EndNode.transform.GetComponent<NodeScript>().DetectPlayer();
+    }
+
+    public void Scoring(GameObject _obj)
+    {
+        Stage1.Instance.CurrentGame.SetBulbSwitch();
+
+        if(_obj != AnswerNode)
+        {
+            Wrong(4);
+        }
+        else
+        {
+            if(DoWrong)
+            {
+                Wrong(3);
+                return;
+            }
+
+            Correct();
+        }
+
+    }
+
+    void Correct()
+    {
+        Stage1.Instance.CurrentGame.Correct();
+    }
+
+    public void Wrong(int _case)
+    {
+        Stage1.Instance.CurrentGame.Wrong(_case);
+    }
+
+    public void BoxColliderOff()
+    {
+        for (int i = 0; i < AllNode.Length; i++)
+            AllNode[i].GetComponent<BoxCollider2D>().enabled = false;
+    }
+}
