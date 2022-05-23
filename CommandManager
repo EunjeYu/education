@@ -1,0 +1,845 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+
+// public class CommandManager : Singleton<CommandManager>/*, IPointerEnterHandler, IPointerExitHandler*/
+public class CommandManager : MonoBehaviour
+{
+    public static CommandManager Instance;
+    
+    public GameObject prefTableCell;
+    [HideInInspector]
+    Stage5GameCore[] DragCore;
+    //원래 내 위치를 저장 시킬 데이터
+    public ScrollRect myScrollRect;
+    public ScrollRect myScrollRect2;
+    public int blankOrder = 0;
+    float imageHeight;
+    float imageHalfHeight;
+    float contentHeight;
+    float contentWidth;
+    public int NowDropZoneOrder;
+    [HideInInspector]
+    public int ratio;
+    public int fillOrder;
+    public int selectedCellIdx;
+    public int cellMaxCnt = 10;
+    public int cellMaxCnt2 = 6;
+    [HideInInspector]
+    public int limitCount = 20;
+
+    public GameObject ReplayBox;
+    List<GameObject> InstantiatedReplay;
+   
+    bool finalMember;
+    public GameObject Content;
+    public GameObject Content2;
+    Vector3 createPos = new Vector3(0, 0, 0);
+
+    public List<GameObject> Cell;
+    
+    public TableCell NowDropZone;
+    public TableCell NowDropZone2;
+    public CommandCollider csCommandCollider;
+    public CommandCollider csCommandCollider2;
+    public GameObject SpotBlank;
+    public GameObject SpotBlank2;
+    public Scrollbar Scrollbar;
+    public Scrollbar Scrollbar2;
+
+    [HideInInspector]
+    public bool isDetect;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
+
+    public void SetFactor()
+    {
+        myScrollRect = myScrollRect2;
+        Content = Content2;
+        csCommandCollider = csCommandCollider2;
+        cellMaxCnt = cellMaxCnt2;
+        SpotBlank = SpotBlank2;
+        Scrollbar = Scrollbar2;
+    }
+
+    public void ResetFactor(ScrollRect SR, GameObject CT, CommandCollider csC, int Cnt, GameObject SB, Scrollbar Sb)
+    {
+        myScrollRect = SR;
+        Content = CT;
+        csCommandCollider = csC;
+        cellMaxCnt = Cnt;
+        SpotBlank = SB;
+        Scrollbar = Sb;
+    }
+
+    public void CellInit()
+    {
+        InstantiatedReplay = new List<GameObject>();
+
+        Instance = this;
+
+        isDetect = false;
+        fillOrder = 0;
+        this.selectedCellIdx = 0;
+        NowDropZoneOrder = 0;
+        Cell = new List<GameObject>();
+
+        imageHeight = this.prefTableCell.GetComponent<RectTransform>().rect.height;
+
+        contentHeight = imageHeight * this.cellMaxCnt;
+        contentWidth = Content.GetComponent<RectTransform>().rect.width;
+
+        imageHalfHeight = imageHeight / 2;
+
+        ratio = (int)contentHeight / (int)(imageHeight);
+
+        for (int i = 0; i < ratio; i++)
+        {
+            Cell.Add(Instantiate(this.prefTableCell, Content.transform) as GameObject);
+            Cell[i].GetComponent<TableCell>().Order = i;
+            Cell[i].name = "Object" + (i + 1); //보기쉬울라고
+
+            if (i == 0) //맨 처음엔 위치지정
+            {
+                createPos = Vector3.zero;
+            }
+            else
+            {
+                createPos = CreateNewPosition2(Cell[i - 1].transform.GetComponent<RectTransform>().anchoredPosition); //이전 렉트의
+            }
+
+            Cell[i].transform.GetComponent<RectTransform>().anchoredPosition = createPos;
+        }
+        resetScrollViewportSize();
+    }
+
+    public void SetDragObjects(Stage5GameCore[] dragCore)
+    {
+        DragCore = new Stage5GameCore[dragCore.Length];
+
+        for (int i = 0; i < DragCore.Length; i++)
+        {
+            DragCore[i] = dragCore[i];
+        }
+
+
+        for (int i = 0; i < ratio; i++)
+        {
+            for (int j = 0; j < DragCore.Length; j++) //Procedure창 cell add
+            {
+                DragCore[j].SetCommand(Cell[i].GetComponent<TableCell>(), Cell[i].GetComponent<TableCell>());
+            }
+        }
+    }
+
+    public void Initialize()
+    {
+
+        for (int i = 0; i < Content.transform.childCount; i++)
+        {
+            Destroy(Content.transform.GetChild(i).gameObject);
+        }
+
+    }
+
+    public void EraseLeftMinimum()
+    {
+        if (Cell.Count > ratio)
+        {
+            for (int i = Cell.Count - 1; i > ratio - 1; i--) //6
+            {
+                GameObject temp = Cell[i];
+                Cell.Remove(temp);
+                Destroy(temp);
+            }
+            Content.GetComponent<RectTransform>().sizeDelta = new Vector2(contentWidth, contentHeight);
+        }
+
+    }
+
+    public void StartBtn()
+    {
+        myScrollRect.verticalNormalizedPosition = 1;
+    }
+
+    Vector3 CreateNewPosition(Vector3 _current)
+    {
+        createPos.x = _current.x;
+        createPos.y = _current.y - imageHalfHeight * 2f;
+        createPos.z = _current.z;
+
+        return createPos;
+    }
+
+    Vector3 CreateNewPosition2(Vector3 _current)
+    {
+        return _current - Vector3.up * (imageHalfHeight * 2.0f);
+    }
+
+    public void SetNowDropZone(GameObject core) //DragEnd때 Call! 
+    {
+        Stage5GameCore csCore = core.GetComponent<Stage5GameCore>();
+      
+        if (csCore == null)
+        {
+            this.UnSetNowDropZone();
+        }
+
+		if(this.csCommandCollider.StayObj == core)
+        {
+            this.csCommandCollider.isInTableView = false;
+
+            RectTransform rectTr = csCore.gameObject.GetComponent<RectTransform>();
+            float corePosY = rectTr.position.y;
+            float distance = 99999;
+            TableCell csSelectedCell = null;
+
+            foreach (GameObject cell in this.Cell)
+            {
+                RectTransform cellRectTr = cell.GetComponent<RectTransform>();
+                float cellPosY = cellRectTr.position.y - cellRectTr.sizeDelta.y * 0.5f;
+                float tmpDistance = Mathf.Abs(corePosY - cellPosY);
+                if (tmpDistance < distance)
+                {
+                    distance = tmpDistance;
+                    csSelectedCell = cell.GetComponent<TableCell>();
+                }
+            }
+
+            if (csSelectedCell == null)
+            {
+                this.UnSetNowDropZone();
+            }
+            else
+            {
+
+                this.NowDropZone = csSelectedCell;
+                this.NowDropZoneOrder = this.NowDropZone.Order;
+            }
+        }
+        else
+        {
+            this.UnSetNowDropZone();
+        }
+    }   
+
+    public void ScrollBarMoving(int _order)
+    {
+        float nextOrder = _order + 1;
+        myScrollRect.content.localPosition = new Vector3(0, imageHeight * (Mathf.Max(nextOrder - (this.cellMaxCnt - 1), 0)), 0);
+
+        return;
+    }
+
+    public void UnSetNowDropZone()
+    {
+        NowDropZone = null;
+    }
+
+    public void SetLimit(int _cnt)
+    {
+        limitCount = _cnt;
+    }
+
+    public void JudgeGoal(Transform tr) 
+    {
+        this.selectedCellIdx = 0;
+
+        if (this.NowDropZone == null) //닿은 셀이 없다면 끝 
+        {
+            return;
+        }
+       
+        int addCnt = 0;
+        Stage5GameCore csCore = tr.gameObject.GetComponent<Stage5GameCore>();
+
+        switch (csCore.dragObjType)
+        {  
+            case Stage5GameCore.DragObjType.ArrowReplay: // 리플레이 타입의 경우 시작과 끝, 비어있는 셀 두개 필요
+                addCnt = 2;
+                break;
+            case Stage5GameCore.DragObjType.ArrowReplayStart:
+                addCnt = 2;
+                break;
+            default: // 비어있는 셀 한개 필요
+                addCnt = 1;
+                break;
+               
+        }
+
+        // 마지막 셀이 비어있는지 체크 후 없으면 셀 추가하기
+        int lastIdx = this.Cell.Count - 1;
+
+        for (int idx = this.Cell.Count - addCnt; idx < this.Cell.Count; idx++)
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content != null)
+                this.AddCell();
+        }
+
+        // DropZone이 비어있지 않고 마지막 셀이 아니었을 경우 DropZone Order부터 다 뒤로 밀기
+        TableCell csCellToDrop = this.Cell[this.NowDropZoneOrder].GetComponent<TableCell>();
+        if (csCellToDrop.content != null && this.NowDropZoneOrder < lastIdx)
+        {
+            for (int idx = (this.Cell.Count - 1); idx >= this.NowDropZoneOrder; idx--)
+            {
+                TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+                if (csCell.content != null)
+                    this.ReplaceCellContent(this.Cell[idx].transform, this.Cell[idx + addCnt].transform);
+            }
+        }
+
+
+        // 하나씩 추가하기
+        int insertCnt = 0;
+       
+        for (int i = 0; i < this.Cell.Count; i++)
+        {
+            TableCell csCell = this.Cell[i].GetComponent<TableCell>();
+
+            Debug.Log("case 1 " + csCell.gameObject.name);
+
+            if(csCell.content)
+            Debug.Log("case 2 " + csCell.content.name );
+           
+            if (csCell.content == null)
+            {
+                // 비어있는 첫 번째 셀을 선택한다.
+                if (insertCnt == 0)
+                {
+                    this.selectedCellIdx = i;
+                    //can;t focus on andythin just sleepy,
+                }
+                // 추가할 셀 카운트 증가
+                insertCnt++;
+
+                // 추가할 셀 갯수와 추가 완료한 셀 갯수가 같으면 종료
+                if (insertCnt >= addCnt)
+                {
+                    break;
+                }
+            }
+        }
+
+        switch (csCore.dragObjType)
+        {
+            case Stage5GameCore.DragObjType.ArrowReplay: // 리플레이 타입
+                {
+                    GameObject arrowReplayStart = tr.gameObject.GetComponent<Stage5GameCore>().Clone2;
+
+                    GameObject temp = Instantiate(ReplayBox, tr.gameObject.GetComponent<Stage5GameCore>().Clone2.transform) as GameObject;
+
+                    InstantiatedReplay.Add(temp);
+
+                    temp.transform.localPosition = new Vector3(64.5f, 0, 0);
+
+                    temp.GetComponent<TempReplayButton>().InitSetting();
+
+                    arrowReplayStart.SetActive(true);
+                    this.NowDropZone = this.Cell[this.selectedCellIdx].GetComponent<TableCell>();
+                    this.NowDropZone.SetTarget(arrowReplayStart.transform.GetComponent<Collider2D>());
+
+                    GameObject arrowReplayEnd = tr.gameObject.GetComponent<Stage5GameCore>().Clone3;
+                    arrowReplayEnd.SetActive(true);
+                    arrowReplayEnd.GetComponent<Stage5GameCore>().repeatCnt = 1;
+                    this.NowDropZone2 = this.Cell[this.selectedCellIdx + 1].GetComponent<TableCell>();
+                    this.NowDropZone2.SetTarget(arrowReplayEnd.transform.GetComponent<Collider2D>());
+                }
+                break;
+            case Stage5GameCore.DragObjType.ArrowReplayStart: // 리플레이 타입
+                {
+                    this.NowDropZone = this.Cell[this.selectedCellIdx].GetComponent<TableCell>();
+                    this.NowDropZone.SetTarget(tr.GetComponent<Collider2D>());
+
+                    this.NowDropZone2 = this.Cell[this.selectedCellIdx + 1].GetComponent<TableCell>();
+                    this.NowDropZone2.SetTarget(tr.GetComponent<Stage5GameCore>().Clone3.transform.GetComponent<Collider2D>());
+                }
+                break;
+           
+           
+            default:
+                {
+                   
+                    this.NowDropZone = this.Cell[this.selectedCellIdx].GetComponent<TableCell>();
+                    this.NowDropZone.SetTarget(tr.GetComponent<Collider2D>());
+                    this.NowDropZone2 = null;
+                }
+                break;
+        }
+    }
+
+    public void SwitchBlank(Transform tr)
+    {
+        int dropIdx = this.NowDropZoneOrder;
+        int moveStartIdx = 0;
+        int moveEndIdx = 0;
+
+        // 옮길 오브젝트 범위 설정
+        Stage5GameCore csSelectedCore = tr.gameObject.GetComponent<Stage5GameCore>();
+        bool pass = false;
+
+        for(int i=0; i<this.Cell.Count; i++)
+        {
+            if(Cell[i].GetComponent<TableCell>().content == tr.gameObject)
+            {
+                pass = true;
+            }
+        }
+
+        if (!pass) return;
+
+        for (int idx = 0; idx < this.Cell.Count; idx++)
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content != null) //내용물이 있을 때, 
+            {
+                if (csSelectedCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayStart || 
+                    csSelectedCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayEnd)
+                {
+                    Stage5GameCore csCore = csCell.content.gameObject.GetComponent<Stage5GameCore>();
+                    if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayStart)
+                    {
+                        moveStartIdx = idx;
+                    }
+                    else if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayEnd)
+                    {
+                        moveEndIdx = idx;
+                    }
+                }
+
+                
+                else
+                {
+                    if (csCell.content == tr.gameObject)
+                    {
+                        moveStartIdx = idx;
+                        moveEndIdx = idx;
+                    }
+                }
+            }
+            else
+            {
+                // 비어있는 셀에 드랍시킬 경우 셀 리스트중에 컨텐츠가 있으면서 마지막인 곳으로 드랍 위치 변경
+                if (dropIdx >= idx)
+                    dropIdx = idx - 1;
+                //Debug.Log("#####^^^^^#####" + dropIdx);
+            }
+        }
+        // 드랍 시작 위치 최종 설정
+  //if (dropIdx >= moveStartIdx && dropIdx <= moveEndIdx) 
+    //   dropIdx = moveStartIdx;
+
+        // 옮길 오브젝트와 남길 오브젝트 정리
+        List<GameObject> remainList = new List<GameObject>();
+        List<GameObject> moveList = new List<GameObject>();
+        for (int idx = 0; idx < this.Cell.Count; idx++)
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content != null)
+            {
+                if (idx >= moveStartIdx && idx <= moveEndIdx)
+                {
+                    moveList.Add(csCell.content);
+                  
+                }
+                else
+                {
+                    remainList.Add(csCell.content);
+                    
+                }
+            }
+        }
+
+        for (int idx = 0; idx < this.Cell.Count; idx++)
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content != null)
+            {
+                if (dropIdx < moveStartIdx)
+                {
+                    // 셀 컨텐츠에 새로 넣기
+                    if (idx >= dropIdx)
+                    {
+                        if (moveList.Count > 0)
+                        {
+                            csCell.content = moveList[0];
+                            moveList.RemoveAt(0);
+                        }
+                        else if (remainList.Count > 0)
+                        {
+                            csCell.content = remainList[0];
+                            remainList.RemoveAt(0);
+                        }
+                    }
+                    else
+                    {
+                        if (remainList.Count > 0)
+                        {
+                            csCell.content = remainList[0];
+                            remainList.RemoveAt(0);
+                        }
+                        else if (moveList.Count > 0)
+                        {
+                            csCell.content = moveList[0];
+                            moveList.RemoveAt(0);
+                        }
+                    }
+                }
+                else
+                {
+                    if (idx >= moveEndIdx - dropIdx)
+                    {
+                        if (remainList.Count > 0)
+                        {
+                            csCell.content = remainList[0];
+                            remainList.RemoveAt(0);
+                        }
+                        else if (moveList.Count > 0)
+                        {
+                            csCell.content = moveList[0];
+                            moveList.RemoveAt(0);
+                        }
+                    }
+                    else
+                    {
+                        if (moveList.Count > 0)
+                        {
+                            csCell.content = moveList[0];
+                            moveList.RemoveAt(0);
+                        }
+                        else if (remainList.Count > 0)
+                        {
+                            csCell.content = remainList[0];
+                            remainList.RemoveAt(0);
+                        }
+                    }
+                }
+
+            }
+
+                // 셀 컨텐츠 재설정
+                if (csCell.content != null)
+                {
+                    csCell.content.transform.SetParent(csCell.gameObject.transform);
+                    csCell.content.name = csCell.gameObject.name;
+                }
+            }
+        }
+    
+
+    public void RemoveContent(Transform tr) 
+    {
+        bool pass = false;
+        for(int i=0; i<this.Cell.Count; i++)
+        {
+            if(Cell[i].GetComponent<TableCell>().content == tr.gameObject)
+            {
+                pass = true;
+            }
+        }
+        if (!pass) return;
+
+        // 옮길 오브젝트 범위 설정
+        Stage5GameCore csSelectedCore = tr.gameObject.GetComponent<Stage5GameCore>();
+        int count = 0;
+        bool selfPass = false;
+
+        bool isRemoveRangeMode = false; // 리플레이 오브젝트의 경우 범위 내에 모두 삭제
+        if (csSelectedCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayStart 
+            || csSelectedCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayEnd)
+            isRemoveRangeMode = true;
+
+        bool isRemoveRange = false;
+        for (int idx = 0; idx < this.Cell.Count; idx++) //셀을 모두 다 돌면서 
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content != null)
+            {
+                Stage5GameCore csCore = csCell.content.GetComponent<Stage5GameCore>();
+
+                if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayStart && csCell.content == tr.gameObject)  //ej
+                {
+                    selfPass = true; //ej
+                }
+
+
+                if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayStart)
+                {
+                    if (selfPass)
+                    {
+                        isRemoveRange = true;
+                        count++;
+                    }
+                }
+
+                if (isRemoveRangeMode == true)
+                {
+                    if (isRemoveRange == true)
+                    {
+                        if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayEnd && selfPass)
+                        {
+                            count--;
+                        }
+                        Destroy(csCell.content);
+                        csCell.content = null;
+                    }
+                }
+                else
+                {
+                    bool dontRemoveContent = false;
+
+                    if (csCell.content == tr.gameObject)
+                    {
+                        for (int i = 0; i < CommandManager_P.Instance.Cell.Count; i++)
+                        {
+                            if (CommandManager_P.Instance.Cell[i].GetComponent<TableCell>().content == tr.gameObject)
+                            {
+                                dontRemoveContent = true;
+                                i = CommandManager_P.Instance.Cell.Count;
+                            }
+                        }
+
+                        if (!dontRemoveContent)
+                        {
+                            Debug.Log("제대로?22");
+                            Destroy(csCell.content);
+                        }
+                        Debug.Log("제대로?");
+                        csCell.content = null;
+                    }
+                }
+
+                if (csCore.dragObjType == Stage5GameCore.DragObjType.ArrowReplayEnd && count == 0)
+                {
+                    isRemoveRange = false;
+                    selfPass = false;
+                }
+            }
+
+        }
+
+        int startIdx = -1;
+        int endIdx = -1;
+        for (int idx = 0; idx < this.Cell.Count; idx++)
+        {
+            TableCell csCell = this.Cell[idx].GetComponent<TableCell>();
+            if (csCell.content == null)
+            {
+                if (startIdx < 0)
+                    startIdx = idx;
+            }
+            else
+            {
+                if (startIdx > -1 && endIdx < 0)
+                    endIdx = idx;
+            }
+        }
+       
+        if (startIdx > -1 && endIdx > -1)
+        {
+            for (int idx = 0; (idx + endIdx) < this.Cell.Count; idx++)
+            {
+                TableCell csCellToRep = this.Cell[startIdx + idx].GetComponent<TableCell>();
+                TableCell csCellToNext = this.Cell[endIdx + idx].GetComponent<TableCell>();
+                csCellToRep.content = csCellToNext.content;
+                if (csCellToRep.content != null)
+                {
+                    csCellToRep.content.transform.SetParent(csCellToRep.gameObject.transform);
+                    csCellToRep.content.name = csCellToRep.gameObject.name;
+                    csCellToNext.content = null;
+                }
+            }
+        }
+
+        for (int i = 0; i < Cell.Count; i++)
+        {
+            if (Cell[i].GetComponent<TableCell>().content == null)
+            {
+                if (i >= this.cellMaxCnt)
+                {
+                    GameObject temp = Cell[i];
+                    Cell.Remove(temp);
+                    Destroy(temp);
+
+                }
+            }
+        }
+       
+        resetScrollViewportSize();
+    }
+
+    public void ArrangeByHand(Transform tr)
+    {
+        int order = 0;
+
+        TableCell csCellToLast = this.Cell[this.Cell.Count - 1].GetComponent<TableCell>();
+        if (csCellToLast.content == null)
+        {
+            for (int i = 0; i < Cell.Count; i++)
+            {
+                TableCell csCell = this.Cell[i].GetComponent<TableCell>();
+                if (csCell.content == null)
+                {
+                    order = i;
+                    i = this.Cell.Count; //판끝내기
+                }
+            }
+        }
+        else
+        {
+            this.AddCell();
+            order = this.Cell.Count - 1;
+        }
+
+        this.NowDropZone = this.Cell[order].GetComponent<TableCell>();
+        this.NowDropZoneOrder = order;
+        this.NowDropZone.SetTarget(tr.GetComponent<Collider2D>());
+    }
+
+    void AddCell() //Cell Count Up And Content size Up
+    {
+        Cell.Add(Instantiate(this.prefTableCell, Content.transform) as GameObject);
+        Cell[Cell.Count - 1].GetComponent<TableCell>().Order = Cell.Count - 1;
+        Cell[Cell.Count - 1].name = "Object" + Cell.Count;
+
+        createPos = CreateNewPosition(Cell[Cell.Count - 2].transform.GetComponent<RectTransform>().anchoredPosition);
+        Cell[Cell.Count - 1].transform.GetComponent<RectTransform>().anchoredPosition = createPos;
+
+        for (int i = 0; i < DragCore.Length; i++)
+            DragCore[i].SetCommand(Cell[Cell.Count - 1].GetComponent<TableCell>(), Cell[Cell.Count - 1].GetComponent<TableCell>());
+        resetScrollViewportSize();
+        //float _contentHeight = Content.GetComponent<RectTransform>().rect.height;
+        //_contentHeight += imageHeight;
+        //Content.GetComponent<RectTransform>().sizeDelta = new Vector2(contentWidth, _contentHeight);
+        ScrollBarMoving(Cell.Count - 1);
+        myScrollRect.verticalNormalizedPosition = 0;
+    }
+
+    public void FillTheBlank()
+    {
+        this.blankOrder = 0;
+
+        for (int i = 0; i < this.Cell.Count; i++)
+        {
+            TableCell csCell = this.Cell[i].GetComponent<TableCell>();
+            if (csCell.content == null)
+            {
+                this.blankOrder = i;
+                i = this.Cell.Count;
+            }
+        }
+
+      //  if (blankOrder > ratio - 1)
+       // {
+      //      for (int i = this.blankOrder; i < this.Cell.Count - 1; i++)
+       //     {
+        //        TableCell csCell = this.Cell[i + 1].GetComponent<TableCell>();
+        //        if (csCell.content != null)
+       //             this.ReplaceCellContent(this.Cell[i + 1].transform, this.Cell[i].transform);
+        //    }
+     //   }
+        // 정상 셀보다 많을 때 삭제해주려고
+        if (this.Cell.Count > this.ratio)
+        {
+           // this.SubtractCell(this.Cell.Count - 1);
+        }
+    }
+
+    void resetScrollViewportSize()
+    {
+        float _contentHeight = 0;
+       
+        if (Cell.Count - this.cellMaxCnt > 0)
+        {
+            _contentHeight = imageHeight * (Cell.Count - this.cellMaxCnt);
+        }
+
+        Content.GetComponent<RectTransform>().sizeDelta = new Vector2(Content.GetComponent<RectTransform>().sizeDelta.x, _contentHeight);
+    }
+     public void CheckFinal(int order)
+    {
+        //
+        //this.finalMember = false;
+
+        //if (order != this.Cell.Count - 1)
+        //{
+        //    TableCell csCell = this.Cell[order + 1].GetComponent<TableCell>();
+         //   if (csCell.content == null)
+          //      finalMember = true;
+       // }
+    }
+
+    // ########################
+    // ## Util
+    // ########################
+
+    void ReplaceCellContent(Transform repTr, Transform parentTr)
+    {
+        TableCell csCellToRep = repTr.gameObject.GetComponent<TableCell>();
+        TableCell csCellToParent = parentTr.gameObject.GetComponent<TableCell>();
+
+        csCellToParent.content = csCellToRep.content;
+        csCellToParent.content.transform.SetParent(parentTr);
+        csCellToParent.content.name = parentTr.gameObject.name;
+
+        csCellToRep.content = null;
+    }
+
+    public void ResetCellContent() //TouchEnd 호출 
+    {
+        int idx = 1;
+        bool isReplayRange = false;
+        foreach (GameObject cell in this.Cell)
+        {
+            TableCell csCell = cell.GetComponent<TableCell>();
+            if (csCell.content == null)
+            {
+                csCell.idxText.text = "";
+            }
+            else
+            {
+                Stage5GameCore csCore = csCell.content.GetComponent<Stage5GameCore>();
+                switch (csCore.dragObjType)
+                {
+                    case Stage5GameCore.DragObjType.ArrowReplayStart:
+                        {
+                            isReplayRange = true;
+                            csCell.SetChildPositionZero();
+                            csCell.idxText.text = string.Format("{0}", idx);
+                            idx++;
+                        }
+                        break;
+
+                    case Stage5GameCore.DragObjType.ArrowReplayEnd:
+                        {
+                            isReplayRange = false;
+                            csCell.SetChildPositionZero();
+                            csCell.idxText.text = "";
+                        }
+                        break;
+
+                    default:
+                        {
+                            if (isReplayRange == true)
+                            {
+                                csCell.SetChildPositionReplay();
+                            }
+                            else
+                            {
+                                csCell.SetChildPositionZero();
+                            }
+                            csCell.idxText.text = string.Format("{0}", idx);
+                            idx++;
+                        }
+                        break;
+                }
+            }
+        }
+    }
+}
+
