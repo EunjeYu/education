@@ -1,0 +1,79 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class AxisManager : MonoBehaviour {
+
+    GameObject[] Node;
+
+    DirectionMode NowDirection;
+
+    LadderRidingManager ladderRidingManager;
+
+    private GameObject HeadNode;
+    private GameObject TailNode;
+
+    Vector3 nodePosition;
+
+    private void OnEnable()
+    {
+        Node = new GameObject[transform.childCount];
+
+        for (int i = 0; i < Node.Length; i++)
+        {
+            Node[i] = transform.GetChild(i).gameObject;
+        }
+
+        ladderRidingManager = transform.parent.GetComponent<LadderRidingManager>();
+
+        NowDirection = ladderRidingManager.NowDirection;
+
+        SetEdgeNode();
+
+        float xValue = Node[0].transform.position.x;
+
+        for (int i = 0; i < Node.Length; i++) //수동배치node정렬
+        {
+            nodePosition = Node[i].transform.position;
+            nodePosition.x = xValue;
+            Node[i].transform.position = nodePosition;
+            Node[i].GetComponent<NodeScript>().Order = i;
+        }
+    }
+
+    void SetEdgeNode()
+    {
+        if (NowDirection == DirectionMode.UP)
+        {
+            HeadNode = Node[0];
+            TailNode = HeadNode = Node[Node.Length - 1];
+        }
+        else
+        {
+            HeadNode = Node[Node.Length - 1];
+            TailNode = Node[0];
+        }
+    }
+
+    public GameObject ReturnNextNode(int _order, bool _up)
+    {
+       if(_up)
+        {
+            if (_order != Node.Length - 1)
+                return Node[_order + 1];
+            else
+                return null;
+        }
+        else
+        {
+            if (_order != 0)
+            {
+                return Node[_order - 1];
+
+            }
+            else
+                return null;
+        }
+    }
+   
+}
