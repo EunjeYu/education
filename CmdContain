@@ -1,0 +1,478 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+
+public class CmdContain : MonoBehaviour
+{
+    public Transform tr;
+    public RectTransform rectTr;
+    public BoxCollider2D coll;
+
+    public List<CmdObj> dataList;
+    float padding = 10.0f;
+
+    public CmdObj.CmdType cmdType;
+    public CmdObj.CmdState cmdState;
+	public GameObject currentCmdLayer;
+    IEnumerator ScrollMoveDtCoroutine;
+
+    // ########################
+    // ## Overrids
+    // ########################
+
+    private void Awake()
+    {
+        this.dataList = new List<CmdObj>();
+        this.ScrollMoveDtCoroutine = null;
+    }
+
+    private void OnDisable()
+    {
+        if (this.ScrollMoveDtCoroutine != null)
+        {
+            StopCoroutine(this.ScrollMoveDtCoroutine);
+            this.ScrollMoveDtCoroutine = null;
+        }
+    }
+    int max;
+    int max_P;
+	bool BlockStart = false;
+	bool Jump1 = false;
+	bool Jump2 = false;
+	bool Jump3 = false;
+
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+		Jump1 = false;
+		Jump2 = false;
+		Jump3 = false;
+
+        if (GameLayer.Instance.cmdDropZone != null)
+        {
+            if (GameLayer.Instance.cmdDropZone == other.gameObject)
+                return;
+        }
+
+        // 프로시져 예외처리
+        bool isExistToProcedual = false;
+        foreach (CmdObj csCmdObj in this.dataList)
+        {
+            if (csCmdObj.cmdType == CmdObj.CmdType.Procedual)
+            {
+                isExistToProcedual = true;
+                break;
+            }
+        }
+
+        CmdLayer csCmdLayerToOther = other.gameObject.GetComponent<CmdLayer>(); 
+        if (isExistToProcedual == true && csCmdLayerToOther.cmdLayerType == CmdLayer.CmdLayerType.Procedual)
+            return;
+		
+		if(stage5.Instance.CurrentGame.Order<7)
+		{
+			int max = stage5.Instance.CurrentGame.MaxCount;
+			int count = 0;
+			for(int i=0; i<GameLayer.Instance.cmdLayer.GetComponent<CmdLayer>().dataList.Count; i++)
+			{ count++;
+				if (GameLayer.Instance.cmdLayer.GetComponent<CmdLayer>().dataList[i].GetComponent<CmdObj>().cmdType == CmdObj.CmdType.ArrowReplayEnd)
+					count--;
+			}
+			if(max == count)
+			{
+				if(this.cmdState==CmdObj.CmdState.ToolBoxDrag)
+				{
+					//GameLayer.Instance.cmdLayer.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+					Jump1 = true;
+					return;
+				}
+			}
+		}
+
+		else
+		{
+			if (other.gameObject.name == "CmdLayerOfProcedual")
+			{
+				int max = stage5.Instance.CurrentGame.MaxCount;
+				int count = 0;
+				for (int i = 0; i < GameLayer.Instance.cmdLayerOfProcedual.GetComponent<CmdLayer>().dataList.Count; i++)
+				{
+					count++;
+					if (GameLayer.Instance.cmdLayerOfProcedual.GetComponent<CmdLayer>().dataList[i].GetComponent<CmdObj>().cmdType == CmdObj.CmdType.ArrowReplayEnd)
+						count--;
+				}
+				if (max == count)
+				{
+					if (this.cmdState == CmdObj.CmdState.ToolBoxDrag)
+					{
+						//GameLayer.Instance.cmdLayerOfProcedual.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+						Jump2 = true;
+						return;
+					}
+					else
+					{
+						if (this.currentCmdLayer.name == "CmdLayerOfProcedual2")
+						{
+							//GameLayer.Instance.cmdLayerOfProcedual.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+							Jump2 = true;
+							return;
+						}
+					}
+				}
+			}
+			if (other.gameObject.name == "CmdLayerOfProcedual2")
+			{
+				int max2 = stage5.Instance.CurrentGame.MaxCount_P;
+				int count2 = 0;
+				for (int i = 0; i < GameLayer.Instance.cmdLayerOfProcedual2.GetComponent<CmdLayer>().dataList.Count; i++)
+				{
+					count2++;
+					if (GameLayer.Instance.cmdLayerOfProcedual2.GetComponent<CmdLayer>().dataList[i].GetComponent<CmdObj>().cmdType == CmdObj.CmdType.ArrowReplayEnd)
+						count2--;
+				}
+				if (max2 == count2)
+				{
+					if (this.cmdState == CmdObj.CmdState.ToolBoxDrag)
+					{
+						//GameLayer.Instance.cmdLayerOfProcedual2.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+						Jump3 = true;
+						return;
+					}
+					else
+					{
+						if (this.currentCmdLayer.name == "CmdLayerOfProcedual")
+						{
+							Jump3 = true;
+							//GameLayer.Instance.cmdLayerOfProcedual2.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+							return;
+						}
+					}
+				}
+			}
+		}
+
+
+        GameLayer.Instance.cmdDropZone = other.gameObject;
+
+        // 기존 셀 위치와 현재 셀 위치가 같으면 예외처리
+        int cellIdx = GameLayer.Instance.GetNearbyCellIdx(this.tr.position) + 1; // 아래에 생성시킨다.
+        if (cellIdx == GameLayer.Instance.nearbyCellIdx)
+            return;
+
+        GameLayer.Instance.nearbyCellIdx = cellIdx;
+        if (GameLayer.Instance.nearbyCellIdx > -1)
+        {
+            // 현재 비어있는 셀 만들어져있는 갯수 체크
+            int emptyCnt = 0;
+            CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+            for (int i = 0; i < csCmdLayer.dataList.Count; i++)
+            {
+                CmdObj cmdObj = csCmdLayer.dataList[i];
+                if (cmdObj.cmdType == CmdObj.CmdType.Empty)
+                    emptyCnt++;
+            }
+
+            // 비어있는 셀 만들기 (자기꺼 + 반복오브젝트들)
+            for (int i = 0; i < (this.dataList.Count - emptyCnt); i++)
+                csCmdLayer.MakeEmptyCell(GameLayer.Instance.nearbyCellIdx);
+
+            // 리스트뷰 리로드
+            csCmdLayer.ReloadListView();
+        }
+
+        if (this.ScrollMoveDtCoroutine == null)
+        {
+            this.ScrollMoveDtCoroutine = this.ScrollMoveDt(0.5f);
+            StartCoroutine(this.ScrollMoveDtCoroutine);
+        }
+    }
+
+    IEnumerator ScrollMoveDt(float dt)
+    {
+        while (true)
+        {
+            if (GameLayer.Instance.cmdDropZone == null)
+                break;
+
+            CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+
+            int moveCellIdx = -1;
+            if (this.tr.position.y > (csCmdLayer.stdPosYOfTop - this.padding))
+            {
+                moveCellIdx = Mathf.Max(GameLayer.Instance.GetNearbyCellIdx(this.tr.position) - this.dataList.Count, 0);
+                csCmdLayer.MoveScrollView(moveCellIdx);
+            }
+            else if (this.tr.position.y < (csCmdLayer.stdPosYOfBottom + this.padding))
+            {
+                moveCellIdx = Mathf.Max(Mathf.Min(GameLayer.Instance.GetNearbyCellIdx(this.tr.position) + this.dataList.Count, (csCmdLayer.dataList.Count - 1)), 0);
+                csCmdLayer.MoveScrollView(moveCellIdx);
+            }
+
+            // 비어 있는 셀 위치 조정
+            if (moveCellIdx >= 0)
+            {
+                GameLayer.Instance.nearbyCellIdx = moveCellIdx;
+                if (GameLayer.Instance.nearbyCellIdx > -1)
+                    csCmdLayer.ReloadEmptyCell(GameLayer.Instance.nearbyCellIdx);
+                // {
+                //     if (csCmdLayer.IsValidInsert(GameLayer.Instance.nearbyCellIdx, this.cmdType) == true)
+                //         csCmdLayer.ReloadEmptyCell(GameLayer.Instance.nearbyCellIdx);
+                // }
+            }
+
+            yield return new WaitForSeconds(dt);
+        }
+
+        if (this.ScrollMoveDtCoroutine != null)
+            this.ScrollMoveDtCoroutine = null;
+
+        yield return null;
+    }
+
+    private void OnTriggerExit2D(Collider2D other)
+    {
+		
+		if (GameLayer.Instance.cmdDropZone != null)
+        {
+            if (GameLayer.Instance.cmdDropZone == other.gameObject)
+            {
+				CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+				csCmdLayer.RemoveEmptyCells(); // 비어있는 셀 삭제
+				csCmdLayer.ReloadListView(); // 리스트뷰 리로드
+				GameLayer.Instance.cmdDropZone = null;
+				GameLayer.Instance.nearbyCellIdx = -1;
+			}
+			
+        }
+        else
+        {
+			if (Jump1) Jump1 = false;
+			if (Jump2) Jump2 = false;
+			if (Jump3) Jump3 = false;
+			if (this.ScrollMoveDtCoroutine != null)
+            {
+                StopCoroutine(this.ScrollMoveDtCoroutine);
+                this.ScrollMoveDtCoroutine = null;
+            }
+		}
+    }
+
+
+    // ########################
+    // ## Touch
+    // ########################
+
+    public void OnDrag(BaseEventData eventData)
+    {
+        PointerEventData eventInfo = eventData as PointerEventData;
+		gameObject.transform.localScale = new Vector3(1.3f, 1.3f, 1.3f);
+        // CmdObj 의 상태에 따라 핸들링
+        switch (this.cmdState)
+        {
+            case CmdObj.CmdState.ToolBoxDrag: //레벨7이전에 외부는 여기 
+				{
+					// CmdContain을 움직인다
+					this.tr.position = eventInfo.position;
+
+					// 비어 있는 셀 위치 조정
+					int cellIdx = GameLayer.Instance.GetNearbyCellIdx(this.tr.position);
+					if (cellIdx != GameLayer.Instance.nearbyCellIdx)
+					{
+						GameLayer.Instance.nearbyCellIdx = cellIdx;
+						if (GameLayer.Instance.nearbyCellIdx > -1 && GameLayer.Instance.cmdDropZone != null)
+						{
+							CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+							// if (csCmdLayer.IsValidInsert(GameLayer.Instance.nearbyCellIdx, this.cmdType) == false)
+							//     return;
+
+							csCmdLayer.ReloadEmptyCell(GameLayer.Instance.nearbyCellIdx);
+							// csCmdLayer.ReloadEmptyCellByLatestAddedCell(GameLayer.Instance.) //방금추가된 요소
+						}
+					}
+
+					break;
+				}
+            case CmdObj.CmdState.CmderDrag:
+                {
+                    // CmdContain을 움직인다
+                    this.tr.position = eventInfo.position;
+
+                    // 비어 있는 셀 위치 조정
+                    int cellIdx = GameLayer.Instance.GetNearbyCellIdx(this.tr.position);
+                    if (cellIdx != GameLayer.Instance.nearbyCellIdx)
+                    {
+                        GameLayer.Instance.nearbyCellIdx = cellIdx;
+                        if (GameLayer.Instance.nearbyCellIdx > -1 && GameLayer.Instance.cmdDropZone != null)
+                        {
+                            CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+                            // if (csCmdLayer.IsValidInsert(GameLayer.Instance.nearbyCellIdx, this.cmdType) == false)
+                            //     return;
+
+                            csCmdLayer.ReloadEmptyCell(GameLayer.Instance.nearbyCellIdx);
+                            // csCmdLayer.ReloadEmptyCellByLatestAddedCell(GameLayer.Instance.) //방금추가된 요소
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    public void OnPointerUp(BaseEventData eventData)
+    {
+        // CmdObj 의 상태에 따라 핸들링
+        switch (this.cmdState)
+        {
+            case CmdObj.CmdState.ToolBoxDrag:
+            case CmdObj.CmdState.CmderDrag:
+                {
+                    if (GameLayer.Instance.cmdDropZone != null)
+                    {
+                        CmdLayer csCmdLayer = GameLayer.Instance.cmdDropZone.GetComponent<CmdLayer>();
+                        if (csCmdLayer.IsValidInsert(GameLayer.Instance.nearbyCellIdx, this.cmdType) == true)
+                        {
+                            // 드랍존 위치에 넣기
+                            for (int i = 0; i < this.dataList.Count; i++)
+                            {
+                                CmdObj csCmdObj = this.dataList[i];
+                                csCmdLayer.DropCmdObj(csCmdObj);
+                            }
+                        }
+                        else
+                        {
+							stage5.Instance.BlockCollider_Repeat.DetectRepeat();
+                            // 반복 3개이상 예외처리
+                            csCmdLayer.RemoveEmptyCells(); // 비어있는 셀 삭제
+                        }
+
+                        csCmdLayer.ReloadListView();
+                        //csCmdLayer.ReloadListView2();// 리스트뷰 리로드
+                    }
+					else
+					{
+						if (Jump1)
+						{
+							Jump1 = false;
+							GameLayer.Instance.cmdLayer.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+						}
+						else if (Jump2)
+						{
+							Jump2 = false;
+							GameLayer.Instance.cmdLayerOfProcedual.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+						}
+						else if (Jump3)
+						{
+							Jump3 = false;
+							GameLayer.Instance.cmdLayerOfProcedual2.GetComponent<CmdLayer>().BlockCollider.GetComponent<BlockCollider>().Detect();
+						}
+					}
+				}
+                break;
+        }
+
+        GameLayer.Instance.cmdDropZone = null;
+        GameLayer.Instance.nearbyCellIdx = -1;
+
+        this.RemoveData();
+        this.coll.enabled = false;
+        gameObject.SetActive(false);
+
+	}
+
+    // ########################
+    // ## Data
+    // ########################
+    CmdObj latestAddedCmdObj = null;
+
+    public void AddData(CmdObj csCmdObj)
+    {
+        latestAddedCmdObj = csCmdObj; // CmdObj Call : During OnDrag
+
+        this.dataList.Add(csCmdObj);
+        csCmdObj.tr.SetParent(this.tr);
+    }
+
+    public void RemoveData()
+    {
+        for (int i = 0; i < this.dataList.Count; i++)
+        {
+            CmdObj csCmdObj = this.dataList[i];
+            Destroy(csCmdObj.gameObject);
+        }
+
+        this.dataList.Clear();
+    }
+
+
+    // ########################
+    // ## Update
+    // ########################
+
+    public void UpdateUI()
+    {
+        // 사이즈 설정
+        bool isAdd = false;
+        Vector2 cmdObjSize = Vector2.zero;
+        Vector2 containSize = Vector2.zero;
+        Vector2 containSizeTmp = Vector2.zero;
+        for (int i = 0; i < this.dataList.Count; i++)
+        {
+            CmdObj csCmdObj = this.dataList[i];
+
+            if (i == 0)
+            {
+                cmdObjSize = csCmdObj.rectTr.sizeDelta;
+                containSize = csCmdObj.rectTr.sizeDelta;
+                containSizeTmp = containSize;
+            }
+
+            if (csCmdObj.cmdType == CmdObj.CmdType.ArrowReplayStart)
+            {
+                isAdd = true;
+                float tmpSizeX = containSize.x + csCmdObj.repeatCntImg.rectTransform.sizeDelta.x * csCmdObj.repeatCntImg.rectTransform.localScale.x;
+                if (tmpSizeX > containSize.x)
+                    containSize.x = tmpSizeX;
+            }
+            else
+            {
+                if (isAdd == true)
+                {
+                    if (csCmdObj.cmdType != CmdObj.CmdType.ArrowReplayEnd)
+                    {
+                        float tmpSizeX = containSizeTmp.x + csCmdObj.rectTr.sizeDelta.x * 0.5f;
+                        if (tmpSizeX > containSizeTmp.x)
+                            containSizeTmp.x = tmpSizeX;
+
+                        if (containSizeTmp.x > containSize.x)
+                            containSize.x = containSizeTmp.x;
+                    }
+
+                    isAdd = false;
+                }
+            }
+        }
+
+        this.rectTr.sizeDelta = new Vector2(
+                                        this.padding * 2.0f + containSize.x,
+                                        this.padding * 2.0f + containSize.y * this.dataList.Count);
+
+        // 안에 CmdObj 위치 설정
+        Vector2 stdPos = new Vector2(
+                                -this.rectTr.sizeDelta.x * 0.5f + this.padding + cmdObjSize.x * 0.5f,
+                                this.rectTr.sizeDelta.y * 0.5f - this.padding - cmdObjSize.y * 0.5f);
+        Vector2 nextPos = Vector2.zero;
+        for (int i = 0; i < this.dataList.Count; i++)
+        {
+            CmdObj csCmdObj = this.dataList[i];
+            if (csCmdObj.cmdType == CmdObj.CmdType.ArrowReplayEnd)
+                nextPos = nextPos + Vector2.left * (cmdObjSize.x * 0.5f);
+
+            csCmdObj.tr.localScale = Vector3.one;
+            csCmdObj.tr.localPosition = stdPos + nextPos;
+
+            if (csCmdObj.cmdType == CmdObj.CmdType.ArrowReplayStart)
+                nextPos = nextPos + new Vector2(cmdObjSize.x * 0.5f, -cmdObjSize.y);
+            else
+                nextPos = nextPos + new Vector2(0, -cmdObjSize.y);
+        }
+    }
+}
